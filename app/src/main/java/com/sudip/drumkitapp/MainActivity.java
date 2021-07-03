@@ -6,8 +6,8 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.media.AudioAttributes;
 import android.media.AudioManager;
+import android.media.AudioTrack;
 import android.media.MediaPlayer;
-import android.media.MediaRecorder;
 import android.media.SoundPool;
 import android.media.projection.MediaProjectionManager;
 import android.net.Uri;
@@ -36,8 +36,6 @@ import java.util.concurrent.Executors;
 public class MainActivity extends AppCompatActivity {
     Map<Integer, Integer> map = new HashMap<>();
     SoundPool soundPool;
-    MediaRecorder mMediaRecorder;
-    private ExecutorService mExecutorService;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -49,8 +47,7 @@ public class MainActivity extends AppCompatActivity {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             ((AudioManager) getSystemService(AUDIO_SERVICE)).setAllowedCapturePolicy(AudioAttributes.ALLOW_CAPTURE_BY_ALL);
         }
-        mExecutorService = Executors.newSingleThreadExecutor();
-        ViewGroup group = ((ViewGroup) findViewById(R.id.layout));
+        ViewGroup group = findViewById(R.id.layout);
         soundPool = new SoundPool(200, AudioManager.STREAM_MUSIC, 0);
         for (int i = 0; i < group.getChildCount(); i++) {
             int resourceId = getResources().getIdentifier(group.getResources().getResourceEntryName(group.getChildAt(i).getId()), "raw", "com.sudip.drumkitapp");
@@ -78,36 +75,23 @@ public class MainActivity extends AppCompatActivity {
         }
 
 
-        findViewById(R.id.record).setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                if (((TextView) v).getText().equals("record")) {
-                    startRecorder();
-                    ((TextView) v).setText("lift to stop");
-                } else if (((TextView) v).getText().equals("lift to stop")) {
-                    stopRecorder();
-                    ((TextView) v).setText("record");
-                }
+        findViewById(R.id.record).setOnClickListener(v -> {
+            if (((TextView) v).getText().equals("record")) {
+                startRecorder();
+                ((TextView) v).setText("lift to stop");
+            } else if (((TextView) v).getText().equals("lift to stop")) {
+                stopRecorder();
+                ((TextView) v).setText("record");
             }
         });
 
-        findViewById(R.id.play).setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                MediaPlayer mediaPlayer = new MediaPlayer();
-                try {
-                    FileInputStream fileInputStream = new FileInputStream(new File(getFilesDir() + "/recorderdemo", "record.m4a"));
-                    mediaPlayer.setDataSource(fileInputStream.getFD());
-                    mediaPlayer.prepare();
-                    mediaPlayer.start();
-                } catch (IOException e) {
-                    e.printStackTrace();
-                    Toast.makeText(getApplicationContext(), "MediaPlayer init error !", Toast.LENGTH_LONG).show();
-                }
+        findViewById(R.id.play).setOnClickListener(v -> {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                Intent service = new Intent(this, ForegroundService.class);
+                service.putExtra("type", "play");
+                startForegroundService(service);
             }
         });
-
-        testCode();
     }
 
 
@@ -117,81 +101,19 @@ public class MainActivity extends AppCompatActivity {
 
 
     private void startRecorder() {
-        mExecutorService.submit(new Runnable() {
-            @Override
-            public void run() {
-                releaseRecorder();
-
-                if (!doStart()) {
-                    recorderFial();
-                }
-            }
-        });
-    }
-
-
-    private void releaseRecorder() {
-        if (mMediaRecorder != null) {
-            mMediaRecorder.release();
-            mMediaRecorder = null;
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            MediaProjectionManager manager = (MediaProjectionManager) getSystemService(Context.MEDIA_PROJECTION_SERVICE);
+            Intent intent = manager.createScreenCaptureIntent();
+            startActivityForResult(intent, 1);
         }
     }
-
-
-    private boolean doStart() {
-
-        try {
-            mMediaRecorder = new MediaRecorder();
-            File file = new File(getFilesDir()
-                    + "/recorderdemo/record.m4a");
-            if (!file.getParentFile().exists()) file.getParentFile().mkdirs();
-            file.createNewFile();
-
-
-            mMediaRecorder.setAudioSource(MediaRecorder.AudioSource.MIC);
-            mMediaRecorder.setOutputFormat(MediaRecorder.OutputFormat.THREE_GPP);
-            mMediaRecorder.setAudioSamplingRate(44100);
-            mMediaRecorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC);
-            mMediaRecorder.setAudioEncodingBitRate(96000);
-            mMediaRecorder.setOutputFile(file.getAbsolutePath());
-
-            mMediaRecorder.prepare();
-            mMediaRecorder.start();
-        } catch (Exception e) {
-            e.printStackTrace();
-            Toast.makeText(MainActivity.this, "record failed，retry plz", Toast.LENGTH_SHORT).show();
-            return false;
-        }
-
-
-        return true;
-    }
-
-    private boolean doStop() {
-        try {
-            mMediaRecorder.stop();
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-        return true;
-    }
-
-
-    private void recorderFial() {
-    }
-
 
     private void stopRecorder() {
-        mExecutorService.submit(new Runnable() {
-            @Override
-            public void run() {
-                if (!doStop()) {
-                    recorderFial();
-                }
-                releaseRecorder();
-
-            }
-        });
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            Intent service = new Intent(this, ForegroundService.class);
+            service.putExtra("type", "stop");
+            startForegroundService(service);
+        }
     }
 
 
@@ -238,15 +160,8 @@ public class MainActivity extends AppCompatActivity {
             Intent service = new Intent(this, ForegroundService.class);
             service.putExtra("code", resultCode);
             service.putExtra("data", data);
+            service.putExtra("type", "start");
             startForegroundService(service);
-        }
-    }
-
-    public void testCode() {
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-            MediaProjectionManager manager = (MediaProjectionManager) getSystemService(Context.MEDIA_PROJECTION_SERVICE);
-            Intent intent = manager.createScreenCaptureIntent();
-            startActivityForResult(intent, 1);
         }
     }
 

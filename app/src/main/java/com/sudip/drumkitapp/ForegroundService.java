@@ -10,36 +10,50 @@ import android.content.Intent;
 import android.graphics.BitmapFactory;
 import android.media.AudioAttributes;
 import android.media.AudioFormat;
+import android.media.AudioManager;
 import android.media.AudioPlaybackCaptureConfiguration;
 import android.media.AudioRecord;
+import android.media.AudioTrack;
 import android.media.projection.MediaProjection;
 import android.media.projection.MediaProjectionManager;
 import android.os.Build;
 import android.os.IBinder;
 import android.support.annotation.Nullable;
 
+import java.io.BufferedInputStream;
+import java.io.DataInputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
 /**
  * @author: Xu
  * @create: 2021-07-02 15:53
  **/
 public class ForegroundService extends Service {
+    public boolean isRecording = false;
+    public boolean isPlaying = false;
+
+    ExecutorService singleExecutor = Executors.newSingleThreadExecutor();
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         createNotificationChannel();
-        MediaProjectionManager manager = null;
+        MediaProjectionManager manager;
         if (android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             int code = intent.getIntExtra("code", -1);
             Intent intentData = intent.getParcelableExtra("data");
-            manager = (MediaProjectionManager) getSystemService(Context.MEDIA_PROJECTION_SERVICE);
-            MediaProjectionManager finalManager = manager;
-            new Thread(){
-                @Override
-                public void run() {
+            if ((isPlaying || isRecording) & !"stop".equals(intent.getStringExtra("type")))
+                return super.onStartCommand(intent, flags, startId);
+            if ("start".equals(intent.getStringExtra("type"))) {
+                manager = (MediaProjectionManager) getSystemService(Context.MEDIA_PROJECTION_SERVICE);
+                MediaProjectionManager finalManager = manager;
+                singleExecutor.submit(() -> {
                     MediaProjection mediaProjection = finalManager.getMediaProjection(code, intentData);
-                    AudioPlaybackCaptureConfiguration config = null;
-
-                    config = new AudioPlaybackCaptureConfiguration.Builder(mediaProjection)
+                    AudioPlaybackCaptureConfiguration config = new AudioPlaybackCaptureConfiguration.Builder(mediaProjection)
                             .addMatchingUsage(AudioAttributes.USAGE_MEDIA)
                             .build();
 
@@ -51,13 +65,58 @@ public class ForegroundService extends Service {
                             .build();
                     record.startRecording();
 
-                    int bufferSize = AudioRecord.getMinBufferSize(8000, AudioFormat.CHANNEL_OUT_STEREO, AudioFormat.ENCODING_PCM_16BIT);
-                    short[] buffer = new short[bufferSize];
-                    while (true){
-                        record.read(buffer, 0, buffer.length);
+                    try {
+                        File file = new File(getFilesDir() + "/recorderdemo/record.m4a");
+                        if (!file.getParentFile().exists()) file.getParentFile().mkdirs();
+                        file.createNewFile();
+                        FileOutputStream fileOutputStream = new FileOutputStream(file);
+                        int bufferSize = AudioRecord.getMinBufferSize(8000, AudioFormat.CHANNEL_OUT_STEREO, AudioFormat.ENCODING_PCM_16BIT);
+                        byte[] buffer = new byte[bufferSize];
+                        isRecording = true;
+                        while (isRecording) {
+                            record.read(buffer, 0, buffer.length);
+                            fileOutputStream.write(buffer);
+                        }
+                        fileOutputStream.close();
+                        record.stop();
+                    } catch (IOException e) {
+                        e.printStackTrace();
                     }
-                }
-            }.start();
+                    isRecording = false;
+                });
+            } else if ("stop".equals(intent.getStringExtra("type"))) {
+                isRecording = false;
+            } else if ("play".equals(intent.getStringExtra("type"))) {
+                singleExecutor.submit(new Runnable() {
+                    @Override
+                    public void run() {
+                        try {
+                            int dataSize = AudioRecord.getMinBufferSize(8000, AudioFormat.CHANNEL_OUT_STEREO, AudioFormat.ENCODING_PCM_16BIT);
+                            byte[] bytes = new byte[dataSize];
+                            //定义输入流，将音频写入到AudioTrack类中，实现播放
+                            File file = new File(getFilesDir() + "/recorderdemo/record.m4a");
+                            DataInputStream dis = new DataInputStream(new BufferedInputStream(new FileInputStream(file)));
+                            //实例AudioTrack
+                            AudioTrack track = new AudioTrack(AudioManager.STREAM_MUSIC, 8000, AudioFormat.CHANNEL_OUT_STEREO, AudioFormat.ENCODING_PCM_16BIT, dataSize, AudioTrack.MODE_STREAM);
+                            //开始播放
+                            track.play();
+                            isPlaying = true;
+                            //由于AudioTrack播放的是流，所以，我们需要一边播放一边读取
+                            while ((dataSize = dis.read(bytes)) != -1) {
+                                if (dataSize > 0) {
+                                    track.write(bytes, 0, dataSize);
+                                }
+                            }
+                            //播放结束
+                            track.flush();
+                        } catch (IOException e) {
+                            e.printStackTrace();
+                        }
+                        isPlaying = false;
+                    }
+                });
+            }
+
 
             //for information
             //https://blog.csdn.net/jiangliloveyou/article/details/11218555
@@ -86,12 +145,9 @@ public class ForegroundService extends Service {
                 .setContentText("is running......") // 设置上下文内容
                 .setWhen(System.currentTimeMillis()); // 设置该通知发生的时间
 
-        /*以下是对Android 8.0的适配*/
-        //普通notification适配
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             builder.setChannelId("notification_id");
         }
-        //前台服务notification适配
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             NotificationManager notificationManager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
             NotificationChannel channel = new NotificationChannel("notification_id", "notification_name", NotificationManager.IMPORTANCE_LOW);
