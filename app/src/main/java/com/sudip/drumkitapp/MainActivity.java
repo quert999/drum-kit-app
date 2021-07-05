@@ -1,15 +1,10 @@
 package com.sudip.drumkitapp;
 
 import android.Manifest;
-import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.media.AudioAttributes;
 import android.media.AudioManager;
-import android.media.AudioTrack;
-import android.media.MediaPlayer;
-import android.media.SoundPool;
-import android.media.projection.MediaProjectionManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -25,34 +20,28 @@ import android.view.ViewGroup;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.IOException;
+import com.google.gson.Gson;
+
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 public class MainActivity extends AppCompatActivity {
-    Map<Integer, Integer> map = new HashMap<>();
-    SoundPool soundPool;
+    private long recordStartTime;
+    private final List<SingleRecordBean> recordAudioList = new ArrayList<>();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        checkPermission();
-
+//        checkPermission();
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             ((AudioManager) getSystemService(AUDIO_SERVICE)).setAllowedCapturePolicy(AudioAttributes.ALLOW_CAPTURE_BY_ALL);
         }
         ViewGroup group = findViewById(R.id.layout);
-        soundPool = new SoundPool(200, AudioManager.STREAM_MUSIC, 0);
-        for (int i = 0; i < group.getChildCount(); i++) {
-            int resourceId = getResources().getIdentifier(group.getResources().getResourceEntryName(group.getChildAt(i).getId()), "raw", "com.sudip.drumkitapp");
-            map.put(resourceId, soundPool.load(this, resourceId, 1));
-        }
+        SoundPoolUtil.initResource(group);
 
 
         for (int i = 0; i < group.getChildCount(); i++) {
@@ -66,8 +55,11 @@ public class MainActivity extends AppCompatActivity {
                         int resourceId = getResources().getIdentifier(ourId, "raw", "com.sudip.drumkitapp");
 //                        SoundPoolPlayer mPlayer = SoundPoolPlayer.create(MainActivity.this, resourceId);
 //                        mPlayer.play();
-                        int soundId = getSoundPool(resourceId);
-                        soundPool.play(soundId, 1, 1, 1, 0, 1);
+                        SoundPoolUtil.playByResourceId(resourceId);
+
+                        if (recordStartTime > 0) {
+                            recordAudioList.add(new SingleRecordBean(System.currentTimeMillis() - recordStartTime, SoundPoolUtil.getSoundPoolId(resourceId)));
+                        }
                     }
                     return true;
                 }
@@ -78,42 +70,48 @@ public class MainActivity extends AppCompatActivity {
         findViewById(R.id.record).setOnClickListener(v -> {
             if (((TextView) v).getText().equals("record")) {
                 startRecorder();
-                ((TextView) v).setText("lift to stop");
-            } else if (((TextView) v).getText().equals("lift to stop")) {
+                recordAudioList.clear();
+                ((TextView) v).setText("click to stop");
+            } else if (((TextView) v).getText().equals("click to stop")) {
                 stopRecorder();
                 ((TextView) v).setText("record");
             }
         });
 
         findViewById(R.id.play).setOnClickListener(v -> {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                Intent service = new Intent(this, ForegroundService.class);
-                service.putExtra("type", "play");
-                startForegroundService(service);
+            if (recordStartTime > 0) {
+                Toast.makeText(getApplicationContext(), "please stop record", Toast.LENGTH_LONG).show();
+                return;
             }
+            Intent intent = new Intent(MainActivity.this, TestActivity.class);
+            intent.putExtra("recordTimeLength", getIntent().getLongExtra("recordTimeLength", 0L));
+            intent.putExtra("recordListData",new Gson().toJson(recordAudioList));
+            startActivity(intent);
+//            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+//                Intent service = new Intent(this, ForegroundService.class);
+//                service.putExtra("type", "play");
+//                startForegroundService(service);
+//            }
         });
     }
 
-
-    public Integer getSoundPool(int id) {
-        return map.get(id);
-    }
-
-
     private void startRecorder() {
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-            MediaProjectionManager manager = (MediaProjectionManager) getSystemService(Context.MEDIA_PROJECTION_SERVICE);
-            Intent intent = manager.createScreenCaptureIntent();
-            startActivityForResult(intent, 1);
-        }
+        recordStartTime = System.currentTimeMillis();
+//        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+//            MediaProjectionManager manager = (MediaProjectionManager) getSystemService(Context.MEDIA_PROJECTION_SERVICE);
+//            Intent intent = manager.createScreenCaptureIntent();
+//            startActivityForResult(intent, 1);
+//        }
     }
 
     private void stopRecorder() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            Intent service = new Intent(this, ForegroundService.class);
-            service.putExtra("type", "stop");
-            startForegroundService(service);
-        }
+        getIntent().putExtra("recordTimeLength", System.currentTimeMillis() - recordStartTime);
+        recordStartTime = 0;
+//        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+//            Intent service = new Intent(this, ForegroundService.class);
+//            service.putExtra("type", "stop");
+//            startForegroundService(service);
+//        }
     }
 
 

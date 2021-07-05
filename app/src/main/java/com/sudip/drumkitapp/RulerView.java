@@ -12,7 +12,7 @@ import java.util.List;
 
 public class RulerView extends View {
     private int mHeight;
-    private int rulerLength = 65;
+    private int rulerLength = 0;   //Unit: 100 ms
     Paint paint = new Paint();
     Paint paintLineLarge = new Paint();
     Paint paintLineMedium = new Paint();
@@ -83,6 +83,7 @@ public class RulerView extends View {
 
         System.out.println("控件高度：" + heightSize);
         mHeight = heightSize;
+        // 10ms per px
         setMeasuredDimension(rulerLength * 10 + Utils.dp2px( 10), heightSize);
     }
 

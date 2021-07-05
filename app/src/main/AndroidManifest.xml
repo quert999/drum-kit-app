@@ -15,8 +15,8 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.DrumKitApp">
         <activity
-            android:name=".TestActivity"
-            android:screenOrientation="landscape">
+            android:name=".MainActivity"
+            android:screenOrientation="portrait">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <action android:name="android.intent.action.VIEW" />
@@ -25,6 +25,10 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".TestActivity"
+            android:screenOrientation="landscape">
+        </activity>
         <service
             android:name=".ForegroundService"
             android:enabled="true"
