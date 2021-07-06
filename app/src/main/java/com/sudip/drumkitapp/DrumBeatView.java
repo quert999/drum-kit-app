@@ -93,4 +93,19 @@ public class DrumBeatView extends View {
         this.drumPosition.clear();
         this.drumPosition.addAll(drumPosition);
     }
+
+    long lastTime;
+    List<SingleRecordBean> playedList = new ArrayList<>();
+    public void onTime(long offset){
+        if (Math.abs(offset - lastTime) > timeLength*100/2){
+            playedList.clear();
+        }
+        lastTime = offset;
+        for (SingleRecordBean singleRecordBean : drumPosition) {
+            if (Math.abs(singleRecordBean.recordTime - offset) < 20 && !playedList.contains(singleRecordBean)){
+                SoundPoolUtil.playByPoolId(singleRecordBean.poolId);
+                playedList.add(singleRecordBean);
+            }
+        }
+    }
 }

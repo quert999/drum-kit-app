@@ -22,7 +22,7 @@ class SoundPoolUtil {
 
     }
 
-    public static void initResource(ViewGroup group){
+    static void initResource(ViewGroup group) {
         map.clear();
         for (int i = 0; i < group.getChildCount(); i++) {
             int resourceId = group.getResources().getIdentifier(group.getResources().getResourceEntryName(group.getChildAt(i).getId()), "raw", "com.sudip.drumkitapp");
@@ -30,12 +30,16 @@ class SoundPoolUtil {
         }
     }
 
-    public static Integer getSoundPoolId(int id) {
+    static Integer getSoundPoolId(int id) {
         return map.get(id);
     }
 
-    public static void playByResourceId(int resourceId){
+    static void playByResourceId(int resourceId) {
         int soundId = getSoundPoolId(resourceId);
         soundPool.play(soundId, 1, 1, 1, 0, 1);
+    }
+
+    static void playByPoolId(int poolId){
+        soundPool.play(poolId, 1, 1, 1, 0, 1);
     }
 }
